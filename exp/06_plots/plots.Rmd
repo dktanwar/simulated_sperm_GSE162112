@@ -1,0 +1,242 @@
+---
+title: "Plots"
+author: "Deepak Tanwar"
+date: "28/09/2021"
+output: html_document
+---
+
+
+# Libraries
+```{r, warning=F, message=F}
+devtools::load_all("../../../../shortRNA/")
+# library(shortRNA)
+library(rtracklayer)
+library(Biostrings)
+```
+
+
+# Data
+```{r}
+bamfile <- "../../shortRNA/03_tse/align/unique.bam"
+
+# Featurtes GRanges
+features <- readRDS("data/features.rds")
+colnames(features@elementMetadata) <- gsub(
+  pattern = "tx",
+  replacement = "transcript",
+  x = colnames(features@elementMetadata)
+)
+colnames(features@elementMetadata) <- gsub(
+  pattern = "biotype",
+  replacement = "type",
+  x = colnames(features@elementMetadata)
+)
+
+
+# miRNAs to plot as GRanges
+spike <- readRDS("data/readsToSpike.rds")
+reads <- rownames(spike)
+reads <- gsub(pattern = "GATTGAAACCATCCTCTGCTTCCA", replacement = "TATGATTGCTCCTCCA", x = reads)
+
+readsC <- as.character(reverseComplement(DNAStringSet(reads)))
+
+# BamFile
+library(GenomicAlignments)
+param = ScanBamParam(what = c("cigar", "pos", "seq"))
+ga <- readGAlignments(bamfile, param = param)
+names(ga) <- ga@elementMetadata$seq
+seqlevelsStyle(ga) <- "Ensembl"
+ga <- ga[names(ga) %in% c(reads, readsC),]
+
+# tr <- "TATGATTGCTCCTCCA"
+# 
+# tr1 <- as.character(reverseComplement(DNAStringSet(tr)))
+# 
+# ga[names(ga) %in% c(tr, tr1),]  
+ 
+o <- readRDS("../../shortRNA/03_tse/o_sim.rds")
+ar <- readRDS("../../shortRNA/03_tse/ar_sim.rds")
+
+gr <- GRanges(ga[names(ga) %in% c(reads, readsC),])
+
+grl <- subsetByOverlaps(gr, features)
+grl <- subsetByOverlaps(features, grl)
+grl <- split(x = grl, grl$symbol)
+grl <- lapply(grl, range)
+# grl <- range(grl)
+# grl <- as(grl, "GRangesList")
+
+# grl <- reduce(grl)
+# grl <- c(grl[1], range(grl[2:3]), grl[4])
+# grl <- as(grl, "GRangesList")
+
+
+# Counts matrix
+counts <- data.frame(readRDS("../../shortRNA/03_tse/fastq/counts.rds"),
+  check.names = FALSE
+)
+
+samples <- colnames(readRDS("data/readsToSpike.rds"))
+
+counts_group1 <- counts[, colnames(spike)[1:4]]
+counts_group2 <- counts[, colnames(spike)[5:8]]
+```
+
+# Correlation with the amount spiked in
+```{r}
+library(ggcorrplot)
+spike <- spike[rownames(spike) %in% c(names(ga), as.character(reverseComplement(DNAStringSet(names(ga))))),]
+cnts <- counts[rownames(spike), colnames(spike)]
+
+corr <- cor(spike, cnts)
+
+ggcorrplot(corr, ggtheme = theme_bw, lab = TRUE)
+```
+
+
+# Making tracks
+
+## All samples
+```{r}
+tracks <- parallel::mclapply(grl, function(x) {
+  makeTracks(
+    gr = x, counts = counts,
+    features = features, bamFile = ga,
+    plotCoverage = FALSE
+  )
+}, mc.preschedule = FALSE, mc.cores = length(grl))
+```
+
+
+
+
+## Group1
+```{r}
+tracks_group1 <- parallel::mclapply(grl, function(x) {
+  makeTracks(
+    gr = x, counts = counts_group1,
+    features = features, bamFile = ga,
+    plotCoverage = FALSE
+  )
+}, mc.preschedule = FALSE, mc.cores = length(grl))
+```
+
+## Group2
+```{r}
+tracks_group2 <- parallel::mclapply(grl, function(x) {
+  makeTracks(
+    gr = x, counts = counts_group2,
+    features = features, bamFile = ga,
+    plotCoverage = FALSE
+  )
+}, mc.preschedule = FALSE, mc.cores = length(grl))
+```
+
+# All samples
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[1], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks[[1]][[1]]
+```
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[2], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks[[2]][[1]]
+```
+
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[3], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks[[3]][[1]]
+```
+
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[4], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks[[4]][[1]]
+```
+
+
+# Group1
+```{r, results='asis'}
+cat(paste("##", names(tracks)[1], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group1[[1]][[1]]
+```
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[2], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group1[[2]][[1]]
+```
+
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[3], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group1[[3]][[1]]
+```
+
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[4], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group1[[4]][[1]]
+```
+
+
+# Group2
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[1], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group2[[1]][[1]]
+```
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[2], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group2[[2]][[1]]
+```
+
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[3], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group2[[3]][[1]]
+```
+
+
+```{r, results='asis'}
+cat(paste("##", names(tracks)[4], "\n"))
+```
+
+```{r, fig.height=9, fig.width=7, fig.align='center'}
+tracks_group2[[4]][[1]]
+```

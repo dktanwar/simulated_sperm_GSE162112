@@ -1,0 +1,37 @@
+INFO	:	Running........ Using 	8 Core(s)
+INFO	:	Compressing Now........
+INFO	:	Compressing ......	SRR13129038.fastq.gz
+INFO	:	SRR13129038.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129038.fastq.gz]
+
+INFO	:	Compressing ......	SRR13129036.fastq.gz
+INFO	:	SRR13129036.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129036.fastq.gz]
+
+INFO	:	Compressing ......	SRR13129041.fastq.gz
+INFO	:	Compressing ......	SRR13129042.fastq.gz
+INFO	:	SRR13129042.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129042.fastq.gz]
+
+INFO	:	Compressing ......	SRR13129037.fastq.gz
+INFO	:	SRR13129037.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129037.fastq.gz]
+
+INFO	:	Compressing ......	SRR13129039.fastq.gz
+INFO	:	Compressing ......	SRR13129040.fastq.gz
+INFO	:	Compressing ......	SRR13129043.fastq.gz
+INFO	:	SRR13129040.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129040.fastq.gz]
+
+INFO	:	SRR13129039.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129039.fastq.gz]
+
+INFO	:	SRR13129041.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129041.fastq.gz]
+
+INFO	:	SRR13129043.fastq.gz	:	:[/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/fq_with_sim/SRR13129043.fastq.gz]
+
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129043.fastq.gz.fasta
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129042.fastq.gz.fasta
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129041.fastq.gz.fasta
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129039.fastq.gz.fasta
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129037.fastq.gz.fasta
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129040.fastq.gz.fasta
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129038.fastq.gz.fasta
+INFO	:	Writing compressed..	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/SRR13129036.fastq.gz.fasta
+INFO	:	Deleting temp Directory........:	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2/_tempUnZipAll
+INFO	:	Please upload:	/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/oasis2.zip	 to Oasis (for analysis)
+INFO	:	Done ......

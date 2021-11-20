@@ -1,0 +1,674 @@
+---
+title: "Sperm short RNA-Seq data analysis"
+output:
+  html_document:
+    theme: cerulean
+    df_print: paged
+    toc: true
+    toc_float: true
+editor_options:
+  chunk_output_type: console
+---
+
+# Library
+```{r sperm-1, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(TreeSummarizedExperiment)
+  library(treeclimbR)
+  library(ape)
+  library(ggtree)
+  library(ggplot2)
+  library(cowplot)
+  library(edgeR)
+  library(ComplexHeatmap)
+  library(dplyr)
+  library(TreeHeatmap)
+  library(ggnewscale)
+  library(scales)
+  # library(castor)
+  library(RColorBrewer)
+})
+```
+
+
+```{r}
+tse <- readRDS("../03_tse/tse.rds")
+data <- log1p(cpm(calcNormFactors(DGEList(assay(tse)))))
+data <- data[rowSums(assay(tse)>10)>2,] # filter sequences with high-enough expression
+rt3 <- get_subtree_at_node(rowTree(tse), "miRNAcluster_17:17830188-17830879+")$subtree
+keep <- intersect(row.names(data), rt3$tip.label) # keep tips that are expressed and in the branch
+rt3 <- get_subtree_with_tips(rt3, keep)$subtree
+
+tse2 <- TreeSummarizedExperiment(list(logcpm=data[keep,]),
+  colData=colData(tse), rowData=rowData(tse)[rt3$tip.label,],
+  rowTree=rt3, rowNodeLab=rt3$tip.label
+ )
+
+ggtree(rowTree(tse2), branch.length="none") + 
+  geom_nodelab(aes(label=label)) + 
+  ggtree(rt3, branch.length="none") + 
+  geom_nodelab() +
+  ggtree(rowTree(tse4), branch.length="none") + 
+  geom_nodelab(aes(label=label))
+```
+
+
+```{r}
+# rt3 <- get_subtree_at_node(rowTree(tse), "miRNAcluster_17:17830188-17830879+")$subtree
+# tse2 <- TreeSummarizedExperiment(
+#     lapply(assays(tse), function(x) x[rt3$tip.label,]),
+#     colData=colData(tse), rowData=rowData(tse)[rt3$tip.label,],
+#     rowTree=rt3, rowNodeLab=rt3$tip.label
+# )
+# ggtree(rowTree(tse2)) + geom_th_heatmap(th_data=log1p(assay(tse2)))
+```
+
+
+# TSE
+```{r}
+tse4 <- readRDS("../03_tse/tse_mircl.rds")
+colnames(colData(tse)) <- tolower(colnames(colData(tse)))
+
+ggtree(rowTree(tse), branch.length="none") + 
+  geom_nodelab(aes(label=label)) + 
+  ggtree(rowTree(tse2), branch.length="none") +
+  geom_nodelab(aes(label=label))
+
+# lvs <- findDescendant(tree = rowTree(tse), node = "miRNA", only.leaf = TRUE)[[1]]
+# sse <- subsetByNode(tse, rowNode = lvs)
+
+# spikes <- readRDS("../../data/simulated/readsToSpike_new.rds")
+# tt <- subsetByLeaf(x = sse, rowLeaf = rownames(sse))
+
+spikes <- readRDS("/mnt/IM/projects/software/shortRNA_reports/sim_sperm_GSE162112/data/simulated/readsToSpike_new.rds")
+
+# sim_tse <- sse[rownames(sse) %in% rownames(spikes)]
+# st <- subsetByLeaf(x = tse, rowLeaf = rownames(spikes))
+
+# tse <- sse
+
+rr <- rownames(tse)[rownames(tse) %in% rownames(spikes)]
+assay(tse)[rr, colnames(spikes)] <- spikes[rr, ]
+
+tse <- tse[,colnames(spikes)]
+colData(tse)$group <- rep(c("Group1", "Group2"), each = 4)
+
+d <- cpm(
+  calcNormFactors(
+    DGEList(counts = assay(tse), samples = colData(tse))
+  ),
+  log = TRUE
+)
+
+assays(tse)[2] <- list(cpm = d)
+```
+
+
+
+
+# Testing tree
+```{r}
+# rt <- get_subtree_at_node(tree = rowTree(tse), node = "miRNA")$subtree
+# rt1 <- rowTree(tse)
+# 
+# length(rt$node.label) == length(rt1$node.label)
+# length(unique(rt$node.label)) == length(unique(rt1$node.label))
+# 
+# length(rt$tip.label) == length(rt1$tip.label)
+# length(unique(rt$tip.label)) == length(unique(rt1$tip.label))
+# 
+# tt <- get_subtree_at_node(tree = rt, node = "miRNAcluster_12:110278048-110278129-")$subtree
+# tt1 <- get_subtree_at_node(tree = rt1, node = "miRNAcluster_12:110278048-110278129-")$subtree
+# 
+# ggtree(tt, color = "firebrick", size = 1, branch.length = "none") +
+#   geom_nodelab(size = 3, color = "purple", angle = 0, vjust = -1.5, hjust = 1.5) +
+#   geom_tiplab(size = 10, color = "black", as_ylab = TRUE)
+# 
+# TreeSummarizedExperiment::subsetByNode(x = tse, rowNode = "miRNAcluster_12:110278048-110278129-")
+```
+
+
+
+
+
+
+
+
+
+
+
+# Differential analysis
+```{r}
+dea <- runDA(TSE = tse)
+out <- nodeResult(object = dea, n = Inf)
+
+# rt <- dea$tree
+
+cand <- getCand(
+  tree = dea$tree,
+  score_data = out, node_column = "node",
+  p_column = "PValue", sign_column = "logFC",
+  message = FALSE
+)
+
+candB <- evalCand(
+  tree = dea$tree,
+  levels = cand$candidate_list,
+  score_data = out, node_column = "node",
+  p_column = "PValue", sign_column = "logFC",
+  method = "BH", limit_rej = 1,
+  use_pseudo_leaf = FALSE,
+  message = FALSE
+)
+
+result <- topNodes(object = candB, n = Inf, p_value = 1)
+
+# lvs <- findDescendant(tree = rowTree(tse), node = result$node[1], only.leaf = TRUE)[[1]]
+# sse <- subsetByNode(toy_tse, rowNode = lvs)
+
+
+lvs <- rowLinks(tse)$nodeLab[rowLinks(tse)$nodeNum %in% result$node]
+
+tse1 <- subsetByLeaf(x = tse, rowLeaf = lvs)
+
+rt <- rowTree(subsetByLeaf(x = tse, rowLeaf = lvs))
+rl <- rowLinks(subsetByLeaf(x = tse, rowLeaf = lvs))
+
+# rl[lvs,]$nodeLab_alias <- as.character(rowLinks(tse)[lvs,]$nodeLab_alias)
+
+# rt <- dea$tree
+# 
+# rt
+
+# rt_t <- as_tibble(rt)
+# rt_p <- as.phylo(rt)
+# 
+# rt <- rt_p
+
+#
+# mir <- c(`mmu-miR-125a-5p` = "TCCCTGAGACCCTTTAACCTGTGA", `mmu-miR-99b-5p` = "CACCCGTAGAACCGACCTTGCG",
+# `mmu-let-7e-5p` = "TGAGGTAGGAGGTTGTATAGTT", `mmu-let-7e-3p` = "CTATACGGCCTCCTAGCTTTCC",
+# `mmu-miR-99b-3p` = "CAAGCTCGTGTCTGTGGGTCCG", `mmu-miR-125a-3p` = "ACAGGTGAGGTTCTTGGGAGCC"
+# )
+#
+# pheatmap(spikes[mir,], scale = "row", cluster_cols = F)
+#
+# pheatmap(assay(tse)[mir,colnames(spikes)], scale = "row", cluster_cols = F)
+# pheatmap(d[mir,colnames(spikes)], scale = "row", cluster_cols = F)
+# Heatmap(t(scale(t(d[mir,colnames(spikes)]))), cluster_columns=FALSE, name="z-score")
+```
+
+# Tree
+```{r}
+# nodes
+all_node <- showNode(tree = rt, only.leaf = FALSE)
+
+# figures
+# fig_tree <- ggtree(rt)
+fig_tree <- ggtree(rt, ladderize = FALSE,
+                   layout = "fan", 
+                   open.angle = 10,
+                   size = 0.5)
+```
+
+# Color branches
+```{r}
+loc <- result$node
+names(loc) <- ifelse(result$logFC > 0, "Up-regulated", "Down-regulated")
+
+df1 <- data.frame(rowLinks(tse))
+df2 <- data.frame(rl)
+
+df <- df1[rownames(df2),]
+df$nn <- 1:nrow(df)
+df$on <- gsub(pattern = "alias_", replacement = "", x = df$nodeLab_alias)
+# rownames(df) <- df$on
+
+loc_0.05 <- df[df$on %in% loc,"nn"]
+names(loc_0.05) <- names(loc)
+
+
+# rl[lvs,]$nodeLab_alias <- as.character(rowLinks(tse)[lvs,]$nodeLab_alias)
+
+br_0.05 <- findDescendant(
+  tree = rt, node = loc_0.05,
+  only.leaf = FALSE, self.include = TRUE
+)
+
+df_branch <- data.frame(
+  node = unlist(br_0.05),
+  Branch = rep(
+    names(loc_0.05),
+    unlist(lapply(br_0.05, length))
+  )
+) %>%
+  distinct() %>%
+  add_row(
+    node = setdiff(all_node, unlist(br_0.05)),
+    Branch = "same"
+  )
+
+# branch colors
+branch_col <- c(
+  "same" = "grey70", "Up-regulated" = "navy",
+  "Down-regulated" = "orange"
+)
+
+# figure: tree
+fig_tree <- fig_tree %<+%
+  df_branch +
+  aes(color = Branch) +
+  scale_color_manual(
+    values = branch_col,
+    guide = guide_legend(
+      override.aes = list(size = 3),
+      order = 1
+    )
+  ) +
+  geom_point2(aes(subset = (node %in% loc_0.05)),
+    color = "red", shape = 19, size = 1.5
+  )
+
+# fig_tree
+```
+
+
+# Scale branches
+```{r}
+# branches without signal
+leaf <- showNode(tree = rt, only.leaf = TRUE)
+leaf_yes <- findDescendant(
+  tree = rt, node = loc_0.05,
+  only.leaf = TRUE, self.include = TRUE
+)
+
+leaf_no <- setdiff(leaf, unlist(leaf_yes))
+node_no <- joinNode(tree = rt, node = leaf_no)
+node_no <- node_no[!isLeaf(tree = rt, node = node_no)]
+
+
+circo_full <- fig_tree
+
+for (i in node_no) {
+  try(circo_full <- scaleClade(circo_full, node = node_no[11], scale = 0.1))
+}
+
+# circo_full
+```
+
+
+```{r}
+# zoom in signal branches
+loc_a <- findDescendant(tree = rt, node = loc_0.05, 
+                only.leaf = TRUE, self.include = TRUE)
+len <- unlist(lapply(loc_a, length))
+node_a <- loc_0.05[len >= 1]
+
+for (i in node_a) {
+    circo_full <- scaleClade(circo_full, node = i, scale = 14.5)
+}
+```
+
+
+# Label hierarchical levels
+```{r}
+ux <- setdiff(sort(unique(circo_full$data$x)), 0)
+# names(ux) <- c("genomic_cluster", "primary_tx", "miRNA", "sequence" )
+df_layer <- data.frame(x = ux) %>%
+  arrange(x) %>%
+  mutate(
+    y = max(circo_full$data$y, na.rm = TRUE),
+    layer = factor(ux)
+  )
+
+# annotate the four levels on the tree
+layer_shape <- 49:51
+names(layer_shape) <- ux
+circo_full <- circo_full +
+  geom_point(
+    data = df_layer,
+    aes(x, y = y + 210, shape = layer),
+    size = 6,
+    inherit.aes = FALSE, show.legend = FALSE
+  ) +
+  scale_shape_manual(
+    values = layer_shape,
+    guide = guide_legend(
+      override.aes = list(size = 4),
+      order = 1
+    )
+  ) +
+  labs(shape = "Hierarchy")
+circo_full
+```
+
+
+
+# Heatmap
+```{r}
+yes_L <- findDescendant(
+  tree = rt, node = loc_0.05,
+  only.leaf = TRUE, self.include = TRUE
+)
+yes_L <- rowLinks(tse1)$nodeNum %in% unlist(yes_L)
+
+# CPM counts
+count_L <- assays(tse1)[[1]][yes_L, ]
+scale_L <- assays(tse1)[[2]][yes_L, ]
+
+# standardized
+scale_L <- t(apply(scale_L, 1, FUN = function(y) {
+  ly <- length(unique(y))
+  if (ly == 1) {
+    sy <- rep(0, length(y))
+  } else {
+    sy <- scale(y)
+  }
+  return(sy)
+}))
+rownames(scale_L) <- rownames(count_L)
+colnames(scale_L) <- colnames(count_L)
+dim(scale_L)
+```
+
+
+```{r}
+group <- colData(tse)$group
+names(group) <- colnames(tse)
+
+fig2 <- TreeHeatmap(
+  tree = rowTree(tse1),
+  rel_width = 0.2,
+  tree_fig = circo_full,
+  hm_data = scale_L,
+  legend_title_hm = "Expression(scale)",
+  tree_hm_gap = 0.3,
+  column_split = group,
+  column_split_gap = 0.05,
+  column_split_label = c(
+    "Group1" = "Group1",
+    "Group2" = "Group2"
+  ),
+  split_label_angle = 80,
+  split_label_size = 4,
+  split_label_offset_y = 260
+) +
+  scale_fill_gradient(
+    low = "navy", high = "yellow",
+    limits = c(-1, 1),
+    oob = squish,
+    guide = guide_colorbar(order = 3)
+  ) +
+  new_scale_fill()
+```
+
+
+
+# Annotation: miRNA
+```{r}
+leaf_a  <- findDescendant(tree = rowTree(tse1), node = node_a, 
+                  only.leaf = TRUE, self.include = TRUE)
+
+names(leaf_a) <- convertNode(tree = rowTree(tse1), node = node_a,
+                           use.alias = TRUE)
+
+df_a <- lapply(node_a, FUN = function(x){
+    xx <- rowData(tse1)[rowLinks(tse1)$nodeNum %in% x, ]
+})
+
+rowData(tse1)$annotation <- unlist(lapply(rowData(tse1)[,"transcript_id"], function(x) paste(x, collapse = ";")))
+
+mir_a <- lapply(leaf_a, FUN = function(x){
+    ix <- (rowLinks(tse1)$nodeNum %in% x) & rowLinks(tse1)$isLeaf
+    xx <- rowData(tse1)[ix, "annotation"]
+    unique(as.character(xx))
+})
+head(mir_a)
+```
+
+
+```{r}
+# mir_s_a <- lapply(mir_a, FUN = function(x){
+#     
+#     if (length(x) == 1) {
+#         gsub(pattern = "mmu-mir-", "", x)
+#     } else {
+#         xx <- unique(stringr::str_extract(x, "^miR-[0-9]+"))
+#         if (length(xx) == 1) {
+#             x <- unlist(strsplit(x = x, split = ";"))
+#             x <- unique(x)
+#             px <- paste(x, collapse = ";")
+#             gsub(pattern = "mmu-mir-", "", px)
+#         } else {
+#             "mixed" 
+#         }}
+# })
+# 
+mat_a <- data.frame(mir = (unlist(mir_a)))
+rownames(mat_a) <- names(mir_a)
+
+length(unique(mat_a[, 1]))
+```
+
+```{r}
+dat <- getData(tree_hm = fig2, type = "heatmap")
+df_line <- data.frame(x = max(dat$x)+0.25,
+                      y1 = max(min(dat$y), 0), 
+                      y2 = max(dat$y))
+
+# n <- length(sort(unique(mat_a[, 1])))
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+cols = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+cols <- cols[1:length(sort(unique(mat_a[, 1])))]
+# cols <- c("darkmagenta", "darkorchid1", "cornflowerblue", "cyan3",
+#           "blue", "plum2", "orange", "firebrick2", "tan4",
+#           "deeppink", "darkslateblue", "darkred", "magenta",
+#           "darkseagreen",
+#           "mediumpurple", "darkolivegreen1", "gray", "black")
+names(cols) <- sort(unique(mat_a[, 1]))
+
+
+fig3 <- TreeHeatmap(tree = rowTree(tse1), 
+                    tree_fig = fig2,  
+                    tree_hm_gap = 1.5,
+                    rel_width = 0.05, 
+                    hm_data = mat_a,
+                    legend_title_hm = "miRNA") + 
+  # scale_fill_brewer(palette = "Paired") +
+    scale_fill_manual(values = cols, guide = guide_legend(order = 4, ncol = 1)) +
+    geom_segment(data = df_line,
+                 aes(x = x, y = y1, xend = x, yend = y2),
+                 linetype = "dashed",  
+                 inherit.aes = FALSE) +
+  geom_nodelab()
+
+fig3 +
+  theme(
+        aspect.ratio = 1,
+        legend.position = c(0.12, 0.5),
+        legend.background = element_rect(fill = NA),
+        plot.title = element_text(hjust = 0.5),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3, "cm"),
+        legend.spacing.x = unit(0.2, "mm"),
+        legend.margin = margin(t = 0, b = 0, r = 20, l = 0),
+        legend.box.margin=margin(t = -5, b = -5, r = 25, l = -60),
+        plot.margin = margin(t = -50, b = -50, r = -150, l = -40)
+    ) +
+  geom_nodelab()
+```
+
+
+```{r}
+leaf_0.05 <- findDescendant(tree = rt, node = loc_0.05, 
+                    only.leaf = TRUE, self.include = TRUE)
+label_0.05 <- convertNode(tree = rt, node = unlist(leaf_0.05))
+
+cluster <- lapply(leaf_0.05, FUN = function(x){
+    ix <- (rowLinks(tse)$nodeNum %in% x) & rowLinks(tse)$isLeaf
+    xx <- rowData(tse)[ix, "annotation"]
+    unique(as.character(xx))
+})
+```
+
+
+
+
+
+
+
+
+
+
+
+# Simulated data
+```{r}
+tse <- readRDS("../03_tse/tse.rds")
+colnames(colData(tse)) <- tolower(colnames(colData(tse)))
+
+d <- cpm(
+  calcNormFactors(
+    DGEList(counts = assay(tse), samples = colData(tse))
+  ),
+  log = TRUE
+)
+
+assays(tse)[[2]] <- d
+
+
+
+sim <- rownames(readRDS("../../data/simulated/readsToSpike.rds"))
+tse_sim <- tse[rownames(tse) %in% sim, ]
+tree_mir <- get_subtree_at_node(tree = rowTree(tse), node = "miRNA")$subtree
+
+tree_sim <- get_subtree_with_tips(tree = tree_mir, only_tips = sim)$subtree
+
+p_mir <- ggtree(tree_sim, color = "firebrick", size = 1, branch.length = "none", type = "fan") +
+  geom_nodelab(size = 3, color = "purple", angle = 0, vjust = -1.5, hjust = 1.5) +
+  geom_tiplab(size = 10, color = "black", as_ylab = TRUE)
+
+fig_tree <- ggtree(tree_sim,
+  ladderize = FALSE,
+  layout = "fan",
+  open.angle = 10,
+  size = 0.5
+)
+
+
+m <- assays(tse)[[2]][tree_sim$tip.label, ]
+m <- m - rowMeans(m[, 1:4])
+
+TreeHeatmap(
+  tree = tree_sim,
+  tree_fig = p_mir,
+  tree_hm_gap = 0.5,
+  rel_width = 0.5,
+  hm_data = m,
+  legend_title_hm = expression(Log[2] ~ FC ~ "(expression)"),
+) +
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red",
+    limits = c(-2, 2),
+    oob = squish,
+    guide = guide_colorbar(order = 3)
+  )
+
+
+
+# result <- topNodes(object = dea, n = Inf, p_value = 0.05)
+# loc_0.05 <- result$node
+
+
+p <- ggtree(tree_sim, color = "firebrick", size = 1, branch.length = "none") +
+  geom_nodelab(size = 3, color = "purple", angle = 0, vjust = -1.5, hjust = 1.5) +
+  geom_tiplab(size = 10, color = "black", as_ylab = TRUE)
+
+# viewClade(p, MRCA(p, "miR-99b"))
+
+TreeHeatmap(
+  tree = tree_sim,
+  tree_fig = p,
+  hm_data = assays(tse)[[2]][tree_sim$tip.label, ],
+)
+```
+
+
+
+
+# Simulated reads
+```{r}
+sim <- readRDS("../../data/simulated/readsToSpike.rds")
+res <- readRDS("results.rds")
+res_sim <- res[rownames(res) %in% rownames(sim), ]
+res_sim$logfc_real <- "2"
+res_sim["AAGTTTGTGATGAGACACTAC", "logfc_real"] <- 0
+res_sim["CTGTAAGTTTGTGATGAGAC", "logfc_real"] <- 0
+
+cnts <- cpm(calcNormFactors(DGEList(assay(tse)[rownames(res_sim), ])), log = T)
+cnts <- cnts - rowMeans(cnts[, 1:4])
+
+
+set.seed(123)
+hm <- Heatmap(
+  matrix = cnts,
+  border = T,
+  cluster_rows = F,
+  cluster_columns = F,
+  top_annotation = HeatmapAnnotation(Groups = colData(tse)[, 2], annotation_name_gp = gpar(fontsize = 0)),
+  left_annotation = rowAnnotation(
+    Biotype = as.character(res_sim[, c("transcript_type")]),
+    annotation_name_gp = gpar(fontsize = 0)
+  ),
+  row_split = as.character(res_sim[, c("transcript_type")]),
+  column_split = colData(tse)[, 2],
+  width = unit(6, "cm"),
+  height = unit(6, "cm"),
+  row_title_gp = gpar(fontsize = 0),
+  row_names_gp = gpar(fontsize = 10),
+  column_names_gp = gpar(fontsize = 10),
+  heatmap_legend_param = list(
+    at = c(-4, 0, 4),
+    title = expression(Log[2] ~ "FC (CPM)"),
+    legend_height = unit(1, "cm")
+  )
+) + Heatmap(
+  matrix = res_sim[, "logFC"],
+  cluster_rows = FALSE,
+  width = unit(0.5, "cm"),
+  name = "Log2FC",
+  column_names_gp = gpar(fontsize = 0),
+  border = TRUE,
+  row_labels = rownames(res_sim),
+  row_names_gp = gpar(fontsize = 10),
+  heatmap_legend_param = list(
+    at = c(-2, 0, 2),
+    title = expression(Log[2] ~ "FC"),
+    legend_height = unit(1, "cm")
+  )
+) +
+  Heatmap(
+    matrix = res_sim[, "logfc_real"],
+    cluster_rows = FALSE,
+    width = unit(0.5, "cm"),
+    name = "LogFC",
+    column_names_gp = gpar(fontsize = 0),
+    border = TRUE,
+    row_labels = rownames(res_sim),
+    row_names_gp = gpar(fontsize = 10),
+    heatmap_legend_param = list(
+      at = c(0, 2),
+      title = expression("Simulated" ~ Log ~ "FC"),
+      legend_height = unit(1, "cm")
+    )
+  )
+
+
+
+draw(hm,
+  heatmap_legend_side = "bottom",
+  annotation_legend_side = "right",
+  merge_legends = TRUE,
+  align_annotation_legend = ""
+)
+```

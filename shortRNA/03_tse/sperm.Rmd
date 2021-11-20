@@ -1,0 +1,399 @@
+---
+title: "Sperm short RNA-Seq data analysis"
+output:
+  html_document:
+    theme: cerulean
+    df_print: paged
+    toc: true
+    toc_float: true
+editor_options:
+  chunk_output_type: console
+---
+
+# Library
+```{r sperm-1, message=FALSE, warning=FALSE}
+library(Biostrings)
+library(plyr)
+library(dplyr)
+library(futile.logger)
+library(BiocParallel)
+library(data.table)
+library(ensembldb)
+library(TreeSummarizedExperiment)
+library(edgeR)
+devtools::load_all("../../../../shortRNA")
+# library(shortRNA)
+```
+
+# `fastq` files
+```{r sperm-2 }
+counts_file <- "fastq/counts.rds"
+
+if (!file.exists(counts_file)) {
+  files <- list.files(path = "../../data/fq_with_sim/", pattern = "gz", full.names = T)
+  names(files) <- gsub(pattern = ".*/|\\.fa.*", replacement = "", x = files)
+
+  m <- fastq2SeqCountMatrix(files = files)
+  saveRDS(object = m, file = counts_file)
+} else {
+  m <- readRDS(counts_file)
+}
+
+fasta_file <- "fastq/unique.fasta"
+
+if (!file.exists(fasta_file)) {
+  fa <- DNAStringSet(row.names(m))
+  # names(fa) <- paste0("S", 1:length(fa))
+  names(fa) <- fa
+  writeXStringSet(fa, fasta_file)
+} else {
+  fa <- readAAStringSet(fasta_file)
+}
+```
+
+# Annotations
+```{r sperm-3 }
+anno_file <- "../genome/features.rds"
+genomeDir <- "../genome/"
+
+if (!file.exists(anno_file)) {
+  db_mmu <- getDB()
+
+  mm10_annoprep <- prepareAnnotation(
+    ensdb = db_mmu$ensdb,
+    genome = "/mnt/IM/reference/genome/gencode/fasta/GRCm38.p5.genome.fa",
+    output_dir = genomeDir,
+    extra.gr = list(piRNA = db_mmu$piRNA_GR, miRNA = db_mmu$miRNA_GR),
+    extra.seqs = list(rRNA = db_mmu$rRNA_fa, tRNA = db_mmu$tRNA_fa),
+    resolveSplicing = NULL,
+    rules = defaultAssignRules(),
+    tRNAEnsembleRemove = TRUE,
+    clusterMiRNA = TRUE
+  )
+
+  saveRDS(db_mmu, "./annotation/db.rds")
+} else {
+  a <- readRDS(anno_file)
+  # db_mmu <- getDB()
+  # db <- readRDS("./annotation/db.rds")
+}
+```
+
+
+# Align data
+```{r sperm-5 }
+align_file <- "align/unique.bam"
+if (!file.exists(align_file)) {
+  alignShortRNA(
+    fastq = "fastq/unique.fasta",
+    index = "../genome/customGenome",
+    nBestLocations = 16,
+    outDir = "align", GTF = exonsBy(db_mmu$ensdb),
+    GTF.featureType = "exon", GTF.attrType = "gene_id"
+  )
+} else {
+  cat("Alignment file exists!\n")
+}
+```
+
+```
+        ==========     _____ _    _ ____  _____  ______          _____
+        =====         / ____| |  | |  _ \|  __ \|  ____|   /\   |  __ \
+          =====      | (___ | |  | | |_) | |__) | |__     /  \  | |  | |
+            ====      \___ \| |  | |  _ <|  _  /|  __|   / /\ \ | |  | |
+              ====    ____) | |__| | |_) | | \ \| |____ / ____ \| |__| |
+        ==========   |_____/ \____/|____/|_|  \_\______/_/    \_\_____/
+       Rsubread 2.4.3
+
+//================================= setting ==================================\\
+||                                                                            ||
+|| Function      : Read alignment (RNA-Seq)                                   ||
+|| Input file    : unique.fasta                                               ||
+|| Output file   : unique.bam (BAM), Sorted                                   ||
+|| Index name    : customGenome                                               ||
+||                                                                            ||
+||                    ------------------------------------                    ||
+||                                                                            ||
+||                               Threads : 16                                 ||
+||                          Phred offset : 33                                 ||
+||                             Min votes : 3 / 10                             ||
+||                        Max mismatches : 3                                  ||
+||                      Max indel length : 5                                  ||
+||            Report multi-mapping reads : yes                                ||
+|| Max alignments per multi-mapping read : 16                                 ||
+||                                                                            ||
+\\============================================================================//
+
+//================= Running (03-Nov-2021 17:40:04, pid=4151) =================\\
+||                                                                            ||
+|| Check the input reads.                                                     ||
+|| The input file contains base space reads.                                  ||
+|| Initialise the memory objects.                                             ||
+|| Estimate the mean read length.                                             ||
+|| Create the output BAM file.                                                ||
+|| Check the index.                                                           ||
+|| Init the voting space.                                                     ||
+|| Global environment is initialised.                                         ||
+|| Load the 1-th index block...                                               ||
+|| The index block has been loaded.                                           ||
+|| Start read mapping in chunk.                                               ||
+||    2% completed, 6.2 mins elapsed, rate=96.0k reads per second             ||
+||    8% completed, 6.2 mins elapsed, rate=111.3k reads per second            ||
+||   15% completed, 6.3 mins elapsed, rate=118.0k reads per second            ||
+||   22% completed, 6.3 mins elapsed, rate=106.2k reads per second            ||
+||   29% completed, 6.3 mins elapsed, rate=97.8k reads per second             ||
+||   36% completed, 6.4 mins elapsed, rate=98.9k reads per second             ||
+||   43% completed, 6.4 mins elapsed, rate=101.1k reads per second            ||
+||   52% completed, 6.4 mins elapsed, rate=103.1k reads per second            ||
+||   60% completed, 6.5 mins elapsed, rate=104.3k reads per second            ||
+||   69% completed, 6.5 mins elapsed, rate=5.2k reads per second              ||
+||   72% completed, 6.5 mins elapsed, rate=5.4k reads per second              ||
+||   75% completed, 6.6 mins elapsed, rate=5.6k reads per second              ||
+||   78% completed, 6.6 mins elapsed, rate=5.8k reads per second              ||
+||   81% completed, 6.6 mins elapsed, rate=6.0k reads per second              ||
+||   84% completed, 6.6 mins elapsed, rate=6.2k reads per second              ||
+||   87% completed, 6.6 mins elapsed, rate=6.4k reads per second              ||
+||   91% completed, 6.6 mins elapsed, rate=6.7k reads per second              ||
+||   95% completed, 6.7 mins elapsed, rate=6.9k reads per second              ||
+||   98% completed, 6.7 mins elapsed, rate=7.1k reads per second              ||
+||                                                                            ||
+||                           Completed successfully.                          ||
+||                                                                            ||
+\\====================================    ====================================//
+
+//================================   Summary =================================\\
+||                                                                            ||
+||                 Total reads : 2,897,082                                    ||
+||                      Mapped : 2,058,664 (71.1%)                            ||
+||             Uniquely mapped : 975,645                                      ||
+||               Multi-mapping : 1,083,019                                    ||
+||                                                                            ||
+||                    Unmapped : 838,418                                      ||
+||                                                                            ||
+||                      Indels : 62                                           ||
+||                                                                            ||
+||                Running time : 6.9 minutes                                  ||
+||                                                                            ||
+\\============================================================================//
+
+                      unique.bam
+Total_reads              2897082
+Mapped_reads             2058664
+Uniquely_mapped_reads     975645
+Multi_mapping_reads      1083019
+Unmapped_reads            838418
+Indels                        62
+```
+
+
+# get the overlaps between alignments and annotation
+
+```{r sperm-6 }
+overlap_file <- "align/overlapBAM.rds"
+if (!file.exists(overlap_file)) {
+  o <- overlapWithTx2(
+    bamFile = align_file, annotation = a,
+    ignoreStrand = TRUE, nbthreads = 16
+  )
+  saveRDS(object = o, file = overlap_file)
+} else {
+  o <- readRDS(overlap_file)
+}
+```
+```
+4014986 alignments loaded, searching for overlaps...
+Found 2604179 overlaps.
+```
+
+
+# We assign the reads
+```{r sperm-9 }
+assigned_file <- "align/assignedReads.rds"
+
+if (!file.exists(assigned_file)) {
+  ar <- assignReads(sources = o, rules = defaultAssignRules())
+  saveRDS(object = ar, file = assigned_file)
+} else {
+  ar <- readRDS(assigned_file)
+}
+```
+
+
+# Annotatins factorList
+```{r}
+fl_file <- "annotation/annoFL.rds"
+
+if (!file.exists(fl_file)) {
+  fl <- shortRNA::featuresAnnoToFL(a)
+  names(fl) <- lapply(fl, function(x) as.character(x[length(x)]))
+  saveRDS(object = fl, file = fl_file)
+} else {
+  fl <- readRDS(fl_file)
+}
+```
+
+# Tree construction
+```{r}
+tree_file <- "annotation/tree.rds"
+if (!file.exists(tree_file)) {
+  mappedFeaturesDF <- ar
+  mappedFeaturesDF$seq <- rownames(mappedFeaturesDF)
+  ar_tree <- addReadsToTree(
+    fL = fl,
+    mappedFeaturesDF = mappedFeaturesDF,
+    unassigned = FALSE,
+    extraTreeBranch = NULL
+  )
+  saveRDS(object = ar_tree, file = tree_file)
+} else {
+  ar_tree <- readRDS(tree_file)
+}
+
+# write.tree(ar_tree, file = "annotation/tree.tree", append = FALSE, digits = 10, tree.names = FALSE)
+```
+
+
+# TSE construction
+```{r}
+rt <- ar_tree
+cd <- data.frame(samples = colnames(m), group = rep(c("Group1", "Group2"), each = 4))
+rownames(cd) <- cd$Samples
+
+logCPM <- log1p(cpm(calcNormFactors(DGEList(m, samples = cd))))
+as <- list(counts = m, logcpm = logCPM)
+
+# tse <- TreeSummarizedExperiment(
+#   assays = as,
+#   rowTree = rt,
+#   # rowData = ar[row.names(m),],
+#   metadata = list(
+#     assignedReads = ar,
+#     counts = m,
+#     notAligned = getReadsFromBam(
+#       bam = align_file
+#     )
+#   )
+# )
+
+tse <- TreeSummarizedExperiment(
+  assays = as,
+  rowTree = rt,
+  # rowData = ar[row.names(m),]
+)
+
+
+rowData(tse) <- ar[rownames(tse),]
+colData(tse) <- DataFrame(cd)
+
+saveRDS(object = tse, file = "tse.rds")
+# tse <- readRDS("tse.rds")
+```
+
+# TSE miRNAs
+```{r}
+mappedFeaturesDF_mir <- ar[any(ar$transcript_type == "miRNA"), ]
+mappedFeaturesDF_mir$seq <- rownames(mappedFeaturesDF_mir)
+ar_tree_mir <- addReadsToTree(
+    fL = fl,
+    mappedFeaturesDF = mappedFeaturesDF_mir,
+    unassigned = FALSE,
+    extraTreeBranch = NULL
+  )
+
+as_mir <- list(counts = m[rownames(m) %in% mappedFeaturesDF_mir$seq,],
+               logcpm = logCPM[rownames(logCPM) %in% mappedFeaturesDF_mir$seq,])
+
+tse_mir <- TreeSummarizedExperiment(
+  assays = as_mir,
+  rowTree = ar_tree_mir,
+  colData = cd,
+  rowData = ar[rownames(mappedFeaturesDF_mir),]
+)
+
+saveRDS(tse_mir, "tse_mir.rds")
+```
+
+
+# TSE miRNAs (afew clusters)
+```{r}
+cl <- a[grep(pattern = "miRNAcluster_17:17830188-17830879+|miRNAcluster_11:78073005", x = a$miRNAcluster),]
+tr <- cl$tx_id
+
+mappedFeaturesDF_mircl <- mappedFeaturesDF_mir[any(mappedFeaturesDF_mir$transcript_id %in% tr), ]
+mappedFeaturesDF_mircl$seq <- rownames(mappedFeaturesDF_mircl)
+ar_tree_mircl <- addReadsToTree(
+    fL = fl,
+    mappedFeaturesDF = mappedFeaturesDF_mircl,
+    unassigned = FALSE,
+    extraTreeBranch = NULL
+  )
+
+as_mircl <- list(counts = m[rownames(m) %in% mappedFeaturesDF_mircl$seq,],
+                 logcpm = logCPM[rownames(logCPM) %in% mappedFeaturesDF_mircl$seq,])
+
+tse_mircl <- TreeSummarizedExperiment(
+  assays = as_mircl,
+  rowTree = ar_tree_mircl,
+  colData = cd,
+  rowData = ar[rownames(mappedFeaturesDF_mircl),]
+)
+
+saveRDS(tse_mircl, "tse_mircl.rds")
+```
+
+
+# TSE Simulated
+```{r}
+spikes <- readRDS("../../data/simulated/readsToSpike_new.rds")
+o_sim <- o[o$seq %in% rownames(spikes),]
+ar_sim <- assignReads(o_sim)
+
+mappedFeaturesDF_sim <- ar_sim
+mappedFeaturesDF_sim$seq <- rownames(mappedFeaturesDF_sim)
+ar_tree_sim <- addReadsToTree(
+    fL = fl,
+    mappedFeaturesDF = mappedFeaturesDF_sim,
+    unassigned = FALSE,
+    extraTreeBranch = NULL
+  )
+
+as_sim <- list(counts = m[rownames(m) %in% mappedFeaturesDF_sim$seq,],
+               logcpm = logCPM[rownames(logCPM) %in% mappedFeaturesDF_sim$seq,])
+
+tse_sim <- TreeSummarizedExperiment(
+  assays = as_sim,
+  rowTree = ar_tree_sim,
+  colData = cd,
+  rowData = ar[rownames(mappedFeaturesDF_sim),]
+)
+
+saveRDS(tse_sim, "tse_sim.rds")
+```
+
+
+# TSE miRNAs (more clusters)
+```{r}
+cl1 <- a[grep(pattern = "miRNAcluster_17:1|miRNAcluster_13:", x = a$miRNAcluster),]
+tr1 <- cl1$tx_id
+
+mappedFeaturesDF_mircl1 <- mappedFeaturesDF_mir[any(mappedFeaturesDF_mir$transcript_id %in% tr1), ]
+mappedFeaturesDF_mircl1$seq <- rownames(mappedFeaturesDF_mircl1)
+ar_tree_mircl1 <- addReadsToTree(
+    fL = fl,
+    mappedFeaturesDF = mappedFeaturesDF_mircl1,
+    unassigned = FALSE,
+    extraTreeBranch = NULL
+  )
+
+as_mircl1 <- list(counts = m[rownames(m) %in% mappedFeaturesDF_mircl1$seq,],
+                 logcpm = logCPM[rownames(logCPM) %in% mappedFeaturesDF_mircl1$seq,])
+
+tse_mircl1 <- TreeSummarizedExperiment(
+  assays = as_mircl1,
+  rowTree = ar_tree_mircl1,
+  colData = cd,
+  rowData = ar[rownames(mappedFeaturesDF_mircl1),]
+)
+
+saveRDS(tse_mircl1, "tse_mircl1.rds")
+```
